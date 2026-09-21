@@ -1,0 +1,10 @@
+[package]
+name = "routesift"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Match a stream of URLs against named route patterns, one line at a time"
+
+[[bin]]
+name = "routesift"
+path = "src/main.rs"
