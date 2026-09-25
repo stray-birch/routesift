@@ -6,15 +6,25 @@ use std::fs;
 use std::io::{self, BufRead, Write};
 use std::process;
 
+fn usage_and_exit() -> ! {
+    eprintln!("usage: routesift [--summary] <routes-file>");
+    eprintln!("reads URLs or paths on stdin, one per line, and prints the matching route");
+    process::exit(2);
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        eprintln!("usage: routesift <routes-file>");
-        eprintln!("reads URLs or paths on stdin, one per line, and prints the matching route");
-        process::exit(2);
+    let mut summary = false;
+    let mut routes_path: Option<&str> = None;
+    for arg in &args[1..] {
+        match arg.as_str() {
+            "--summary" => summary = true,
+            other if routes_path.is_none() => routes_path = Some(other),
+            _ => usage_and_exit(),
+        }
     }
+    let routes_path = routes_path.unwrap_or_else(|| usage_and_exit());
 
-    let routes_path = &args[1];
     let routes = match load_routes(routes_path) {
         Ok(routes) => routes,
         Err(err) => {
@@ -31,6 +41,9 @@ fn main() {
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut out = io::BufWriter::new(stdout.lock());
+
+    let mut counts = vec![0u64; routes.len()];
+    let mut nomatch_count = 0u64;
 
     // stdin.lock().lines() pulls one line at a time off the underlying
     // buffered reader, so a multi-gigabyte access log never has to sit
@@ -49,18 +62,42 @@ fn main() {
         }
 
         let path = route::extract_path(&line);
-        let result = routes.iter().find_map(|r| r.matches(path).map(|p| (r.name.as_str(), p)));
+        let result = routes
+            .iter()
+            .enumerate()
+            .find_map(|(i, r)| r.matches(path).map(|p| (i, p)));
+
+        if summary {
+            match result {
+                Some((i, _)) => counts[i] += 1,
+                None => nomatch_count += 1,
+            }
+            continue;
+        }
 
         let write_result = match result {
-            Some((name, params)) if params.is_empty() => writeln!(out, "{}\t{}", name, line),
-            Some((name, params)) => {
+            Some((i, params)) if params.is_empty() => writeln!(out, "{}\t{}", routes[i].name, line),
+            Some((i, params)) => {
                 let pairs: Vec<String> = params.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
-                writeln!(out, "{}\t{}\t{}", name, pairs.join("&"), line)
+                writeln!(out, "{}\t{}\t{}", routes[i].name, pairs.join("&"), line)
             }
             None => writeln!(out, "NOMATCH\t{}", line),
         };
 
         if let Err(err) = write_result {
+            eprintln!("routesift: error writing output: {}", err);
+            process::exit(1);
+        }
+    }
+
+    if summary {
+        for (route, count) in routes.iter().zip(counts.iter()) {
+            if let Err(err) = writeln!(out, "{}\t{}", route.name, count) {
+                eprintln!("routesift: error writing output: {}", err);
+                process::exit(1);
+            }
+        }
+        if let Err(err) = writeln!(out, "NOMATCH\t{}", nomatch_count) {
             eprintln!("routesift: error writing output: {}", err);
             process::exit(1);
         }

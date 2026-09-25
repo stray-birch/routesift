@@ -68,8 +68,26 @@ stripped before matching, so only the path is compared against your patterns.
 Routes are tried in the order they appear in the file and the first match
 wins, same as most web framework routers.
 
+## Summary mode
+
+Pass `--summary` to tally match counts instead of printing every line:
+
+```
+$ routesift --summary routes.txt < access.log
+
+health	812
+user_profile	4310
+user_posts	96
+static_assets	1502
+NOMATCH	7
+```
+
+One line per route, in the order it appears in the routes file, followed by
+a `NOMATCH` count. No per-line output is printed in this mode, so it's safe
+to run against the same huge logs as the default mode.
+
 ## Status
 
-First pass. Working match logic and a streaming main loop; see the roadmap
-in the commit history for what's still missing (regex-shaped segments,
-case-insensitive matching, a summary/count mode).
+First pass. Working match logic, a streaming main loop, and a summary/count
+mode; see the roadmap in the commit history for what's still missing
+(regex-shaped segments, case-insensitive matching).
